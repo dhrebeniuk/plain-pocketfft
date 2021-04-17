@@ -1,4 +1,4 @@
-// swift-tools-version:5.1
+// swift-tools-version:5.3
 
 import PackageDescription
 
@@ -7,14 +7,19 @@ let package = Package(
     products: [
         .library(
             name: "PlainPocketFFT",
-            targets: ["PlainPocketFFT"]),
+            targets: ["PlainPocketFFT", "PlainPocketFFTSwift"]
+        )
     ],
-    dependencies: [
-    ],
+    dependencies: [],
     targets: [
         .target(
             name: "PlainPocketFFT",
-            dependencies: []),
-        
+            path: "Sources/ObjC"
+        ),
+        .target(
+            name: "PlainPocketFFTSwift",
+            dependencies: ["PlainPocketFFT"],
+            path: "Sources/Swift"
+        )
     ]
 )
