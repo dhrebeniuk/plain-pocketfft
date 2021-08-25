@@ -95,6 +95,8 @@ int rfftp_factorize (rfftp_plan plan);
 
 int execute_real_forward(const double *a1, double *resultMatrix, int cols, int rows, double fct);
 
+int execute_real_backward(const double *data,  double *resultArray, int cols, int rows, double fct);
+
 double *execute_real_forward1(const double *a1, int cols, int rows, double fct);
 
 #endif /* pocketfft_h */

@@ -9,6 +9,7 @@
 #include "pocketfft.h"
 #include <math.h>
 #include "string.h"
+#include "stdio.h"
 
 #define NPY_RESTRICT
 
@@ -96,27 +97,35 @@ NOINLINE static void calc_first_half(size_t n, double * restrict res)
 {
   size_t ndone=(n+1)>>1;
   double * p = res+n-1;
+
   calc_first_octant(n<<2, p);
+
   size_t i4=0, in=n, i=0;
   for (; i4<=in-i4; ++i, i4+=4) // octant 0
   {
     res[2*i] = p[2*i4]; res[2*i+1] = p[2*i4+1];
   }
-  for (; i4-in <= 0; ++i, i4+=4) // octant 1
+
+  // Potential bug in numpy, need resolve in future and ask Numpy maintaigers
+  for (; (int)i4-(int)in <= 0; ++i, i4+=4) // octant 1
   {
     size_t xm = in-i4;
     res[2*i] = p[2*xm+1]; res[2*i+1] = p[2*xm];
   }
+    
   for (; i4<=3*in-i4; ++i, i4+=4) // octant 2
   {
     size_t xm = i4-in;
     res[2*i] = -p[2*xm+1]; res[2*i+1] = p[2*xm];
   }
+
+    
   for (; i<ndone; ++i, i4+=4) // octant 3
   {
     size_t xm = 2*in-i4;
     res[2*i] = -p[2*xm]; res[2*i+1] = p[2*xm+1];
   }
+
 }
 
 NOINLINE static void fill_first_quadrant(size_t n, double * restrict res)
@@ -149,18 +158,6 @@ NOINLINE static void fill_first_half(size_t n, double * restrict res)
       }
   }
 
-//NOINLINE static void fill_second_half(size_t n, double * restrict res)
-//  {
-//  if ((n&1)==0)
-//    for (size_t i=0; i<n; ++i)
-//      res[i+n] = -res[i];
-//  else
-//    for (size_t i=2, j=2*n-2; i<n; i+=2, j-=2)
-//      {
-//      res[j  ] =  res[i  ];
-//      res[j+1] = -res[i+1];
-//      }
-//  }
 
 NOINLINE static void sincos_2pibyn_half(size_t n, double * restrict res)
   {
@@ -175,15 +172,11 @@ NOINLINE static void sincos_2pibyn_half(size_t n, double * restrict res)
     calc_first_quadrant(n, res);
     fill_first_half(n, res);
     }
-  else
-    calc_first_half(n, res);
+  else {
+      calc_first_half(n, res);
+  }
   }
 
-//NOINLINE static void sincos_2pibyn(size_t n, double * restrict res)
-//  {
-//  sincos_2pibyn_half(n, res);
-//  fill_second_half(n, res);
-//  }
 
 NOINLINE static size_t largest_prime_factor (size_t n)
   {
@@ -1526,3 +1519,401 @@ int execute_real_forward(const double *a1, double *resultMatrix, int cols, int r
     return 0;
 }
 
+#undef C1
+#undef C2
+#undef CH2
+
+#undef CH
+#undef CC
+#define CH(a,b,c) ch[(a)+ido*((b)+l1*(c))]
+#define CC(a,b,c) cc[(a)+ido*((b)+cdim*(c))]
+
+NOINLINE static void radb2(size_t ido, size_t l1, const double * restrict cc,
+  double * restrict ch, const double * restrict wa)
+  {
+  const size_t cdim=2;
+
+  for (size_t k=0; k<l1; k++)
+    PM (CH(0,k,0),CH(0,k,1),CC(0,0,k),CC(ido-1,1,k))
+  if ((ido&1)==0)
+    for (size_t k=0; k<l1; k++)
+      {
+      CH(ido-1,k,0) = 2.*CC(ido-1,0,k);
+      CH(ido-1,k,1) =-2.*CC(0    ,1,k);
+      }
+  if (ido<=2) return;
+  for (size_t k=0; k<l1;++k)
+    for (size_t i=2; i<ido; i+=2)
+      {
+      size_t ic=ido-i;
+      double ti2, tr2;
+      PM (CH(i-1,k,0),tr2,CC(i-1,0,k),CC(ic-1,1,k))
+      PM (ti2,CH(i  ,k,0),CC(i  ,0,k),CC(ic  ,1,k))
+      MULPM (CH(i,k,1),CH(i-1,k,1),WA(0,i-2),WA(0,i-1),ti2,tr2)
+      }
+  }
+
+NOINLINE static void radb3(size_t ido, size_t l1, const double * restrict cc,
+  double * restrict ch, const double * restrict wa)
+  {
+  const size_t cdim=3;
+  static const double taur=-0.5, taui=0.86602540378443864676;
+
+  for (size_t k=0; k<l1; k++)
+    {
+    double tr2=2.*CC(ido-1,1,k);
+    double cr2=CC(0,0,k)+taur*tr2;
+    CH(0,k,0)=CC(0,0,k)+tr2;
+    double ci3=2.*taui*CC(0,2,k);
+    PM (CH(0,k,2),CH(0,k,1),cr2,ci3);
+    }
+  if (ido==1) return;
+  for (size_t k=0; k<l1; k++)
+    for (size_t i=2; i<ido; i+=2)
+      {
+      size_t ic=ido-i;
+      double tr2=CC(i-1,2,k)+CC(ic-1,1,k); // t2=CC(I) + conj(CC(ic))
+      double ti2=CC(i  ,2,k)-CC(ic  ,1,k);
+      double cr2=CC(i-1,0,k)+taur*tr2;     // c2=CC +taur*t2
+      double ci2=CC(i  ,0,k)+taur*ti2;
+      CH(i-1,k,0)=CC(i-1,0,k)+tr2;         // CH=CC+t2
+      CH(i  ,k,0)=CC(i  ,0,k)+ti2;
+      double cr3=taui*(CC(i-1,2,k)-CC(ic-1,1,k));// c3=taui*(CC(i)-conj(CC(ic)))
+      double ci3=taui*(CC(i  ,2,k)+CC(ic  ,1,k));
+      double di2, di3, dr2, dr3;
+      PM(dr3,dr2,cr2,ci3) // d2= (cr2-ci3, ci2+cr3) = c2+i*c3
+      PM(di2,di3,ci2,cr3) // d3= (cr2+ci3, ci2-cr3) = c2-i*c3
+      MULPM(CH(i,k,1),CH(i-1,k,1),WA(0,i-2),WA(0,i-1),di2,dr2) // ch = WA*d2
+      MULPM(CH(i,k,2),CH(i-1,k,2),WA(1,i-2),WA(1,i-1),di3,dr3)
+      }
+  }
+
+NOINLINE static void radb4(size_t ido, size_t l1, const double * restrict cc,
+  double * restrict ch, const double * restrict wa)
+  {
+  const size_t cdim=4;
+  static const double sqrt2=1.41421356237309504880;
+
+  for (size_t k=0; k<l1; k++)
+    {
+    double tr1, tr2;
+    PM (tr2,tr1,CC(0,0,k),CC(ido-1,3,k))
+    double tr3=2.*CC(ido-1,1,k);
+    double tr4=2.*CC(0,2,k);
+    PM (CH(0,k,0),CH(0,k,2),tr2,tr3)
+    PM (CH(0,k,3),CH(0,k,1),tr1,tr4)
+    }
+  if ((ido&1)==0)
+    for (size_t k=0; k<l1; k++)
+      {
+      double tr1,tr2,ti1,ti2;
+      PM (ti1,ti2,CC(0    ,3,k),CC(0    ,1,k))
+      PM (tr2,tr1,CC(ido-1,0,k),CC(ido-1,2,k))
+      CH(ido-1,k,0)=tr2+tr2;
+      CH(ido-1,k,1)=sqrt2*(tr1-ti1);
+      CH(ido-1,k,2)=ti2+ti2;
+      CH(ido-1,k,3)=-sqrt2*(tr1+ti1);
+      }
+  if (ido<=2) return;
+  for (size_t k=0; k<l1;++k)
+    for (size_t i=2; i<ido; i+=2)
+      {
+      double ci2, ci3, ci4, cr2, cr3, cr4, ti1, ti2, ti3, ti4, tr1, tr2, tr3, tr4;
+      size_t ic=ido-i;
+      PM (tr2,tr1,CC(i-1,0,k),CC(ic-1,3,k))
+      PM (ti1,ti2,CC(i  ,0,k),CC(ic  ,3,k))
+      PM (tr4,ti3,CC(i  ,2,k),CC(ic  ,1,k))
+      PM (tr3,ti4,CC(i-1,2,k),CC(ic-1,1,k))
+      PM (CH(i-1,k,0),cr3,tr2,tr3)
+      PM (CH(i  ,k,0),ci3,ti2,ti3)
+      PM (cr4,cr2,tr1,tr4)
+      PM (ci2,ci4,ti1,ti4)
+      MULPM (CH(i,k,1),CH(i-1,k,1),WA(0,i-2),WA(0,i-1),ci2,cr2)
+      MULPM (CH(i,k,2),CH(i-1,k,2),WA(1,i-2),WA(1,i-1),ci3,cr3)
+      MULPM (CH(i,k,3),CH(i-1,k,3),WA(2,i-2),WA(2,i-1),ci4,cr4)
+      }
+  }
+
+NOINLINE static void radb5(size_t ido, size_t l1, const double * restrict cc,
+  double * restrict ch, const double * restrict wa)
+  {
+  const size_t cdim=5;
+  static const double tr11= 0.3090169943749474241, ti11=0.95105651629515357212,
+                      tr12=-0.8090169943749474241, ti12=0.58778525229247312917;
+
+  for (size_t k=0; k<l1; k++)
+    {
+    double ti5=CC(0,2,k)+CC(0,2,k);
+    double ti4=CC(0,4,k)+CC(0,4,k);
+    double tr2=CC(ido-1,1,k)+CC(ido-1,1,k);
+    double tr3=CC(ido-1,3,k)+CC(ido-1,3,k);
+    CH(0,k,0)=CC(0,0,k)+tr2+tr3;
+    double cr2=CC(0,0,k)+tr11*tr2+tr12*tr3;
+    double cr3=CC(0,0,k)+tr12*tr2+tr11*tr3;
+    double ci4, ci5;
+    MULPM(ci5,ci4,ti5,ti4,ti11,ti12)
+    PM(CH(0,k,4),CH(0,k,1),cr2,ci5)
+    PM(CH(0,k,3),CH(0,k,2),cr3,ci4)
+    }
+  if (ido==1) return;
+  for (size_t k=0; k<l1;++k)
+    for (size_t i=2; i<ido; i+=2)
+      {
+      size_t ic=ido-i;
+      double tr2, tr3, tr4, tr5, ti2, ti3, ti4, ti5;
+      PM(tr2,tr5,CC(i-1,2,k),CC(ic-1,1,k))
+      PM(ti5,ti2,CC(i  ,2,k),CC(ic  ,1,k))
+      PM(tr3,tr4,CC(i-1,4,k),CC(ic-1,3,k))
+      PM(ti4,ti3,CC(i  ,4,k),CC(ic  ,3,k))
+      CH(i-1,k,0)=CC(i-1,0,k)+tr2+tr3;
+      CH(i  ,k,0)=CC(i  ,0,k)+ti2+ti3;
+      double cr2=CC(i-1,0,k)+tr11*tr2+tr12*tr3;
+      double ci2=CC(i  ,0,k)+tr11*ti2+tr12*ti3;
+      double cr3=CC(i-1,0,k)+tr12*tr2+tr11*tr3;
+      double ci3=CC(i  ,0,k)+tr12*ti2+tr11*ti3;
+      double ci4, ci5, cr5, cr4;
+      MULPM(cr5,cr4,tr5,tr4,ti11,ti12)
+      MULPM(ci5,ci4,ti5,ti4,ti11,ti12)
+      double dr2, dr3, dr4, dr5, di2, di3, di4, di5;
+      PM(dr4,dr3,cr3,ci4)
+      PM(di3,di4,ci3,cr4)
+      PM(dr5,dr2,cr2,ci5)
+      PM(di2,di5,ci2,cr5)
+      MULPM(CH(i,k,1),CH(i-1,k,1),WA(0,i-2),WA(0,i-1),di2,dr2)
+      MULPM(CH(i,k,2),CH(i-1,k,2),WA(1,i-2),WA(1,i-1),di3,dr3)
+      MULPM(CH(i,k,3),CH(i-1,k,3),WA(2,i-2),WA(2,i-1),di4,dr4)
+      MULPM(CH(i,k,4),CH(i-1,k,4),WA(3,i-2),WA(3,i-1),di5,dr5)
+      }
+  }
+
+
+#undef CC
+#undef CH
+
+#undef CC
+#undef CH
+#define CC(a,b,c) cc[(a)+ido*((b)+cdim*(c))]
+#define CH(a,b,c) ch[(a)+ido*((b)+l1*(c))]
+#define C1(a,b,c) cc[(a)+ido*((b)+l1*(c))]
+#define C2(a,b) cc[(a)+idl1*(b)]
+#define CH2(a,b) ch[(a)+idl1*(b)]
+
+NOINLINE static void radbg(size_t ido, size_t ip, size_t l1,
+  double * restrict cc, double * restrict ch, const double * restrict wa,
+  const double * restrict csarr)
+  {
+  const size_t cdim=ip;
+  size_t ipph=(ip+1)/ 2;
+  size_t idl1 = ido*l1;
+
+  for (size_t k=0; k<l1; ++k)        // 102
+    for (size_t i=0; i<ido; ++i)     // 101
+      CH(i,k,0) = CC(i,0,k);
+
+  for (size_t j=1, jc=ip-1; j<ipph; ++j, --jc)   // 108
+    {
+    size_t j2=2*j-1;
+    for (size_t k=0; k<l1; ++k)
+      {
+      CH(0,k,j ) = 2*CC(ido-1,j2,k);
+      CH(0,k,jc) = 2*CC(0,j2+1,k);
+      }
+    }
+
+  if (ido!=1)
+    {
+    for (size_t j=1, jc=ip-1; j<ipph; ++j,--jc)   // 111
+      {
+      size_t j2=2*j-1;
+      for (size_t k=0; k<l1; ++k)
+        for (size_t i=1, ic=ido-i-2; i<=ido-2; i+=2, ic-=2)      // 109
+          {
+          CH(i  ,k,j ) = CC(i  ,j2+1,k)+CC(ic  ,j2,k);
+          CH(i  ,k,jc) = CC(i  ,j2+1,k)-CC(ic  ,j2,k);
+          CH(i+1,k,j ) = CC(i+1,j2+1,k)-CC(ic+1,j2,k);
+          CH(i+1,k,jc) = CC(i+1,j2+1,k)+CC(ic+1,j2,k);
+          }
+      }
+    }
+    
+
+  for (size_t l=1,lc=ip-1; l<ipph; ++l,--lc)
+    {
+    for (size_t ik=0; ik<idl1; ++ik)
+      {
+      C2(ik,l ) = CH2(ik,0)+csarr[2*l]*CH2(ik,1)+csarr[4*l]*CH2(ik,2);
+      C2(ik,lc) = csarr[2*l+1]*CH2(ik,ip-1)+csarr[4*l+1]*CH2(ik,ip-2);
+      }
+    size_t iang=2*l;
+    size_t j=3,jc=ip-3;
+    for(; j<ipph-3; j+=4,jc-=4)
+      {
+      iang+=l; if(iang>ip) iang-=ip;
+      double ar1=csarr[2*iang], ai1=csarr[2*iang+1];
+
+      iang+=l; if(iang>ip) iang-=ip;
+      double ar2=csarr[2*iang], ai2=csarr[2*iang+1];
+
+      iang+=l; if(iang>ip) iang-=ip;
+      double ar3=csarr[2*iang], ai3=csarr[2*iang+1];
+
+      iang+=l; if(iang>ip) iang-=ip;
+      double ar4=csarr[2*iang], ai4=csarr[2*iang+1];
+
+      for (size_t ik=0; ik<idl1; ++ik)
+        {
+        C2(ik,l ) += ar1*CH2(ik,j )+ar2*CH2(ik,j +1)
+                    +ar3*CH2(ik,j +2)+ar4*CH2(ik,j +3);
+        C2(ik,lc) += ai1*CH2(ik,jc)+ai2*CH2(ik,jc-1)
+                    +ai3*CH2(ik,jc-2)+ai4*CH2(ik,jc-3);
+        }
+      }
+    for(; j<ipph-1; j+=2,jc-=2)
+      {
+      iang+=l; if(iang>ip) iang-=ip;
+      double ar1=csarr[2*iang], ai1=csarr[2*iang+1];
+      iang+=l; if(iang>ip) iang-=ip;
+      double ar2=csarr[2*iang], ai2=csarr[2*iang+1];
+      for (size_t ik=0; ik<idl1; ++ik)
+        {
+        C2(ik,l ) += ar1*CH2(ik,j )+ar2*CH2(ik,j +1);
+        C2(ik,lc) += ai1*CH2(ik,jc)+ai2*CH2(ik,jc-1);
+        }
+      }
+    for(; j<ipph; ++j,--jc)
+      {
+      iang+=l; if(iang>ip) iang-=ip;
+      double war=csarr[2*iang], wai=csarr[2*iang+1];
+      for (size_t ik=0; ik<idl1; ++ik)
+        {
+        C2(ik,l ) += war*CH2(ik,j );
+        C2(ik,lc) += wai*CH2(ik,jc);
+        }
+      }
+    }
+    
+  for (size_t j=1; j<ipph; ++j)
+    for (size_t ik=0; ik<idl1; ++ik)
+      CH2(ik,0) += CH2(ik,j);
+
+  for (size_t j=1, jc=ip-1; j<ipph; ++j,--jc)   // 124
+    for (size_t k=0; k<l1; ++k)
+      {
+          size_t index1 = 0+ido*(k+l1*(j));
+          size_t index2 = 0+ido*(k+l1*(jc));
+      CH(0,k,j ) = C1(0,k,j)-C1(0,k,jc);
+      CH(0,k,jc) = C1(0,k,j)+C1(0,k,jc);
+      }
+
+
+  if (ido==1) return;
+
+  for (size_t j=1, jc=ip-1; j<ipph; ++j, --jc)  // 127
+    for (size_t k=0; k<l1; ++k)
+      for (size_t i=1; i<=ido-2; i+=2)
+        {
+        CH(i  ,k,j ) = C1(i  ,k,j)-C1(i+1,k,jc);
+        CH(i  ,k,jc) = C1(i  ,k,j)+C1(i+1,k,jc);
+        CH(i+1,k,j ) = C1(i+1,k,j)+C1(i  ,k,jc);
+        CH(i+1,k,jc) = C1(i+1,k,j)-C1(i  ,k,jc);
+        }
+
+// All in CH
+
+  for (size_t j=1; j<ip; ++j)
+    {
+    size_t is = (j-1)*(ido-1);
+    for (size_t k=0; k<l1; ++k)
+      {
+      size_t idij = is;
+      for (size_t i=1; i<=ido-2; i+=2)
+        {
+        double t1=CH(i,k,j), t2=CH(i+1,k,j);
+        CH(i  ,k,j) = wa[idij]*t1-wa[idij+1]*t2;
+        CH(i+1,k,j) = wa[idij]*t2+wa[idij+1]*t1;
+        idij+=2;
+        }
+      }
+    }
+  }
+#undef C1
+#undef C2
+#undef CH2
+
+#undef CC
+#undef CH
+#undef PM
+#undef MULPM
+#undef WA
+
+static int rfftp_backward(rfftp_plan plan, double c[], double fct)
+  {
+  if (plan->length==1) return 0;
+  size_t n=plan->length;
+  size_t l1=1, nf=plan->nfct;
+  double *ch = RALLOC(double, n);
+  if (!ch) return -1;
+  double *p1=c, *p2=ch;
+
+  for(size_t k=0; k<nf; k++)
+    {
+    size_t ip = plan->fct[k].fct,
+           ido= n/(ip*l1);
+    if(ip==4)
+      radb4(ido, l1, p1, p2, plan->fct[k].tw);
+    else if(ip==2)
+      radb2(ido, l1, p1, p2, plan->fct[k].tw);
+    else if(ip==3)
+      radb3(ido, l1, p1, p2, plan->fct[k].tw);
+    else if(ip==5)
+      radb5(ido, l1, p1, p2, plan->fct[k].tw);
+    else
+      radbg(ido, ip, l1, p1, p2, plan->fct[k].tw, plan->fct[k].tws);
+    SWAP (p1,p2,double *);
+    l1*=ip;
+    }
+  copy_and_norm(c,p1,n,fct);
+  DEALLOC(ch);
+  return 0;
+  }
+
+
+int rfft_backward(rfft_plan plan, double c[], double fct) {
+    if (plan->packplan)
+        return rfftp_backward(plan->packplan,c,fct);
+//    else // if (plan->blueplan)
+//        return rfftblue_backward(plan->blueplan,c,fct);
+}
+
+int execute_real_backward(const double *data,  double *resultArray, int cols, int rows, double fct) {
+    int ndim = 2;
+    const npy_intp odim[] = {cols, rows};
+    size_t npts = rows;
+    
+    double *ret = resultArray;
+    int nrepeats = cols*rows/npts;
+    
+    double *rptr = (double *)(ret),
+           *dptr = (double *)(data);
+    
+    rfft_plan plan = make_rfft_plan(npts);
+
+    int fail = 0;
+    
+    for (int i = 0; i < nrepeats; i++) {
+      memcpy((char *)(rptr + 1), (dptr + 2), (npts - 1)*sizeof(double));
+      rptr[0] = dptr[0];
+      if (rfft_backward(plan, rptr, fct)!=0) {
+          fail=1;
+          break;
+      }
+        
+      rptr += npts;
+      dptr += npts*2;
+    }
+    
+    // TODO: return destroy rfft_plan
+//    destroy_rfft_plan(plan);
+    
+    return fail;
+}
