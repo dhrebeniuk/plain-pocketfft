@@ -344,6 +344,13 @@ NOINLINE rfftp_plan make_rfftp_plan (size_t length) {
   return plan;
 }
 
+static void destroy_rfft_plan (rfft_plan plan)  {
+if (plan->packplan)
+    destroy_rfftp_plan(plan->packplan);
+  DEALLOC(plan);
+}
+
+
 NOINLINE void destroy_rfftp_plan (rfftp_plan plan) {
   DEALLOC(plan->mem);
   DEALLOC(plan);
@@ -1510,6 +1517,8 @@ int execute_real_forward(const double *a1, double *resultMatrix, int cols, int r
             rptr += rstep;
             dptr += npts;
         }
+        
+        destroy_rfft_plan(plan);
     }
     
     if (fail) {
@@ -1912,8 +1921,8 @@ int execute_real_backward(const double *data,  double *resultArray, int cols, in
       dptr += npts*2;
     }
     
-    // TODO: return destroy rfft_plan
-//    destroy_rfft_plan(plan);
+    destroy_rfft_plan(plan);
     
     return fail;
 }
+
