@@ -1881,8 +1881,8 @@ static int rfftp_backward(rfftp_plan plan, double c[], double fct)
 int rfft_backward(rfft_plan plan, double c[], double fct) {
     if (plan->packplan)
         return rfftp_backward(plan->packplan,c,fct);
-//    else // if (plan->blueplan)
-//        return rfftblue_backward(plan->blueplan,c,fct);
+    else // if (plan->blueplan)
+        return -1;
 }
 
 int execute_real_backward(const double *data,  double *resultArray, int cols, int rows, double fct) {
