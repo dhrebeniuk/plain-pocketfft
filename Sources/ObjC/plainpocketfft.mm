@@ -102,8 +102,8 @@ template <typename T> T sqrt(T) = delete;
 using shape_t = std::vector<size_t>;
 using stride_t = std::vector<ptrdiff_t>;
 
-constexpr bool FORWARD  = true,
-               BACKWARD = false;
+//constexpr bool FORWARD  = true,
+//               BACKWARD = false;
 
 // only enable vector support for gcc>=5.0 and clang>=5.0
 #ifndef POCKETFFT_NO_VECTORS
@@ -525,12 +525,12 @@ void thread_map(size_t /* nthreads */, Func f)
 
 inline size_t &thread_id()
   {
-  static thread_local size_t thread_id_=0;
+  static size_t thread_id_=0;
   return thread_id_;
   }
 inline size_t &num_threads()
   {
-  static thread_local size_t num_threads_=1;
+  static size_t num_threads_=1;
   return num_threads_;
   }
 static const size_t max_threads = std::max(1u, std::thread::hardware_concurrency());
@@ -3202,8 +3202,8 @@ template<typename T> void dct(const shape_t &shape,
 
 } // namespace detail
 
-using detail::FORWARD;
-using detail::BACKWARD;
+//using detail::FORWARD;
+//using detail::BACKWARD;
 using detail::shape_t;
 using detail::stride_t;
 using detail::dct;
