@@ -1481,7 +1481,7 @@ int rfft_forward(rfft_plan plan, double c[], double fct) {
         return rfftblue_forward(plan->blueplan,c,fct);
 }
 
-int execute_real_forward(const double *a1, double *resultMatrix, int cols, int rows, double fct) {
+int execute_real_forward(const double *a1, double *resultMatrix, npy_intp cols, npy_intp rows, double fct) {
     rfft_plan plan=NULL;
     int fail = 0;
     const double *data = a1;
@@ -1894,7 +1894,7 @@ int rfft_backward(rfft_plan plan, double c[], double fct) {
     return -1;
 }
 
-int execute_real_backward(const double *data,  double *resultArray, int cols, int rows, double fct) {
+int execute_real_backward(const double *data,  double *resultArray, npy_intp cols, npy_intp rows, double fct) {
     int ndim = 2;
     const npy_intp odim[] = {cols, rows};
     size_t npts = rows;
