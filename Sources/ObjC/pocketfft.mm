@@ -698,7 +698,7 @@ NOINLINE static void pass3f (size_t ido, size_t l1, const cmplx * restrict cc,
   cmplx * restrict ch, const cmplx * restrict wa)
   {
   const size_t cdim=3;
-  const double tw1r=-0.5, tw1i= -0.86602540378443864676;
+  const double tw1r=-0.5f, tw1i= -0.86602540378443864676;
 
   if (ido==1)
     for (size_t k=0; k<l1; ++k)
@@ -1162,53 +1162,59 @@ static cfftp_plan make_cfftp_plan (size_t length)
   }
 
 NOINLINE static fftblue_plan make_fftblue_plan (size_t length)
+{
+fftblue_plan plan = RALLOC(fftblue_plan_i,1);
+if (!plan) return NULL;
+plan->n = length;
+plan->n2 = good_size(plan->n*2-1);
+plan->mem = RALLOC(double, 2*plan->n+2*plan->n2);
+if (!plan->mem) { DEALLOC(plan); return NULL; }
+plan->bk  = plan->mem;
+plan->bkf = plan->bk+2*plan->n;
+
+/* initialize b_k */
+double *tmp = RALLOC(double,4*plan->n);
+if (!tmp) { DEALLOC(plan->mem); DEALLOC(plan); return NULL; }
+sincos_2pibyn(2*plan->n,tmp);
+plan->bk[0] = 1;
+plan->bk[1] = 0;
+
+size_t coeff=0;
+for (size_t m=1; m<plan->n; ++m)
   {
-  fftblue_plan plan = RALLOC(fftblue_plan_i,1);
-  if (!plan) return NULL;
-  plan->n = length;
-  plan->n2 = good_size(plan->n*2-1);
-  plan->mem = RALLOC(double, 2*plan->n+2*plan->n2);
-  if (!plan->mem) { DEALLOC(plan); return NULL; }
-  plan->bk  = plan->mem;
-  plan->bkf = plan->bk+2*plan->n;
+  coeff+=2*m-1;
+  if (coeff>=2*plan->n) coeff-=2*plan->n;
+  plan->bk[2*m  ] = tmp[2*coeff  ];
+  plan->bk[2*m+1] = tmp[2*coeff+1];
+  }
+
+/* initialize the zero-padded, Fourier transformed b_k. Add normalisation. */
+double xn2 = 1./plan->n2;
+plan->bkf[0] = plan->bk[0]*xn2;
+plan->bkf[1] = plan->bk[1]*xn2;
+    
+for (size_t m=2; m<2*plan->n; m+=2)
+  {
+  plan->bkf[m]   = plan->bkf[2*plan->n2-m]   = plan->bk[m]   *xn2;
+  plan->bkf[m+1] = plan->bkf[2*plan->n2-m+1] = plan->bk[m+1] *xn2;
+  }
+    
+    
+    
+for (size_t m=2*plan->n;m<=(2*plan->n2-2*plan->n+1);++m)
+  plan->bkf[m]=0.;
+plan->plan=make_cfftp_plan(plan->n2);
+if (!plan->plan)
+  { DEALLOC(tmp); DEALLOC(plan->mem); DEALLOC(plan); return NULL; }
 
     
-/* initialize b_k */
-  double *tmp = RALLOC(double,4*plan->n);
-  if (!tmp) { DEALLOC(plan->mem); DEALLOC(plan); return NULL; }
-  sincos_2pibyn(2*plan->n,tmp);
-  plan->bk[0] = 1;
-  plan->bk[1] = 0;
+if (cfftp_forward(plan->plan,plan->bkf,1.)!=0)
+  { DEALLOC(tmp); DEALLOC(plan->mem); DEALLOC(plan); return NULL; }
+DEALLOC(tmp);
 
-  size_t coeff=0;
-  for (size_t m=1; m<plan->n; ++m)
-    {
-    coeff+=2*m-1;
-    if (coeff>=2*plan->n) coeff-=2*plan->n;
-    plan->bk[2*m  ] = tmp[2*coeff  ];
-    plan->bk[2*m+1] = tmp[2*coeff+1];
-    }
-
-  /* initialize the zero-padded, Fourier transformed b_k. Add normalisation. */
-  double xn2 = 1./plan->n2;
-  plan->bkf[0] = plan->bk[0]*xn2;
-  plan->bkf[1] = plan->bk[1]*xn2;
-  for (size_t m=2; m<2*plan->n; m+=2)
-    {
-    plan->bkf[m]   = plan->bkf[2*plan->n2-m]   = plan->bk[m]   *xn2;
-    plan->bkf[m+1] = plan->bkf[2*plan->n2-m+1] = plan->bk[m+1] *xn2;
-    }
-  for (size_t m=2*plan->n;m<=(2*plan->n2-2*plan->n+1);++m)
-    plan->bkf[m]=0.;
-  plan->plan=make_cfftp_plan(plan->n2);
-  if (!plan->plan)
-    { DEALLOC(tmp); DEALLOC(plan->mem); DEALLOC(plan); return NULL; }
-  if (cfftp_forward(plan->plan,plan->bkf,1.)!=0)
-    { DEALLOC(tmp); DEALLOC(plan->mem); DEALLOC(plan); return NULL; }
-  DEALLOC(tmp);
-
-  return plan;
-  }
+    
+return plan;
+}
 
 
 rfft_plan make_rfft_plan (size_t length) {
@@ -1760,6 +1766,9 @@ return 0;
 #undef CX2
 #undef CX
 
+NOINLINE WARN_UNUSED_RESULT
+static int cfftp_backward(cfftp_plan plan, double c[], double fct)
+  { return pass_all(plan,(cmplx *)c, fct, 1); }
 
 int fftblue_fft(fftblue_plan plan, double c[], int isign, double fct)
   {
@@ -1806,8 +1815,8 @@ int fftblue_fft(fftblue_plan plan, double c[], int isign, double fct)
       }
 
 /* inverse FFT */
-//  if (cfftp_backward (plan->plan,akf,1.)!=0)
-//    { DEALLOC(akf); return -1; }
+  if (cfftp_backward (plan->plan,akf,1.)!=0)
+    { DEALLOC(akf); return -1; }
 
 /* multiply by b_k */
   if (isign>0)
