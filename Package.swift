@@ -3,10 +3,10 @@
 import PackageDescription
 
 let package = Package(
-    name: "PlainPocketFFT",
+    name: "PlainPocketFFTSwift",
     products: [
         .library(
-            name: "PlainPocketFFT",
+            name: "PlainPocketFFTSwift",
             targets: ["PlainPocketFFT", "PlainPocketFFTSwift"]
         )
     ],
