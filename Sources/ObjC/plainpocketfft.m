@@ -1,12 +1,12 @@
 //
-//  pocketfft.c
+//  plainpocketfft.c
 //  RosaKit
 //
 //  Created by Hrebeniuk Dmytro on 21.12.2019.
 //  Copyright © 2019 Dmytro Hrebeniuk. All rights reserved.
 //
 
-#include "pocketfft.h"
+#include "plainpocketfft.h"
 #include <math.h>
 #include "string.h"
 #include "stdio.h"

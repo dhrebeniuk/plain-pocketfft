@@ -1,5 +1,5 @@
 //
-//  pocketfft.h
+//  plainpocketfft.h
 //  RosaKit
 //
 //  Created by Hrebeniuk Dmytro on 21.12.2019.
