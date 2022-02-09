@@ -1,5 +1,4 @@
 #import "PlainPocketFFTRunner.h"
-#import "pocketfft.h"
 #import "plainpocketfft.h"
 
 
@@ -13,8 +12,5 @@
   return execute_real_backward(a1, resultArray, (npy_intp)cols, (npy_intp)rows, fct);
 }
 
-+ (int)execute_dct:(double *)a1 result:(double *)resultArray dctType:(int)dctType inorm:(int)inorm cols:(int)cols rows:(int)rows {
-    return execute_dct(a1, resultArray, dctType, inorm, cols, rows);
-}
 
 @end

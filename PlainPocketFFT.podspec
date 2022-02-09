@@ -9,7 +9,7 @@
 Pod::Spec.new do |s|
 
   s.name         = "PlainPocketFFT"
-  s.version      = "0.0.8"
+  s.version      = "0.0.9"
   s.summary      = "PlainPocketFFT it's pocketfft from NumPy"
   s.description  = "PlainPocketFFT it's pocketfft from NumPy which can be used in other libraries for iOS/MacOS/WatchOS etc.."
 
@@ -24,7 +24,7 @@ Pod::Spec.new do |s|
   s.tvos.deployment_target = "9.0"
 
   s.source       = { :git => "https://github.com/dhrebeniuk/plain-pocketfft.git", :tag => "#{s.version}" }
-  s.source_files  = "Sources/**/*.{h,m,mm}"
+  s.source_files  = "Sources/**/*.{h,m}"
 
   s.requires_arc = false
 
