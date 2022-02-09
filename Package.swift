@@ -3,22 +3,22 @@
 import PackageDescription
 
 let package = Package(
-    name: "PlainPocketFFTSwift",
+    name: "PlainPocketFFT",
     products: [
         .library(
-            name: "PlainPocketFFTSwift",
-            targets: ["PlainPocketFFT", "PlainPocketFFTSwift"]
+            name: "PlainPocketFFT",
+            targets: ["PlainPocketFFTOBJC", "PlainPocketFFT"]
         )
     ],
     dependencies: [],
     targets: [
         .target(
-            name: "PlainPocketFFT",
+            name: "PlainPocketFFTOBJC",
             path: "Sources/ObjC"
         ),
         .target(
-            name: "PlainPocketFFTSwift",
-            dependencies: ["PlainPocketFFT"],
+            name: "PlainPocketFFT",
+            dependencies: ["PlainPocketFFTOBJC"],
             path: "Sources/Swift"
         )
     ]

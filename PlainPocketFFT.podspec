@@ -8,7 +8,7 @@
 
 Pod::Spec.new do |s|
 
-  s.name         = "PlainPocketFFTSwift"
+  s.name         = "PlainPocketFFT"
   s.version      = "0.0.9"
   s.summary      = "PlainPocketFFT it's pocketfft from NumPy"
   s.description  = "PlainPocketFFT it's pocketfft from NumPy which can be used in other libraries for iOS/MacOS/WatchOS etc.."
